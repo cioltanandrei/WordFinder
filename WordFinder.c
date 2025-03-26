@@ -1,26 +1,29 @@
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#define MAX_PATH_LEN 100
+#define MAX_TEXT_LEN 1024
 
 char word[30];
 int no_ap = 0;
+pthread_mutex_t lock;
+
+typedef struct {
+    int id;
+    char path[MAX_PATH_LEN];
+} ThreadArgs;
 
 void *search_word(void *vargp) {
-
-    int *myid = (int *) vargp;
-    char path[100] = "";
-    char file_text[1024];
+    ThreadArgs *args = (ThreadArgs *)vargp;
+    char file_text[MAX_TEXT_LEN];
     int no_ap_local = 0;
-    FILE *fp;
-
-
-    printf("Enter path of file: ", *myid);
-    scanf("%s", path);
-
-    fp = fopen(path, "r");
+    FILE *fp = fopen(args->path, "r");
 
     if (fp == NULL) {
-        printf("Error opening file\n");
+        printf("Error opening file: %s\n", args->path);
+        pthread_exit(NULL);
     }
 
     while (fgets(file_text, sizeof(file_text), fp)) {
@@ -31,26 +34,46 @@ void *search_word(void *vargp) {
         }
     }
 
+    fclose(fp);
+
+    pthread_mutex_lock(&lock);
     no_ap += no_ap_local;
+    pthread_mutex_unlock(&lock);
+
+    free(args);
     pthread_exit(NULL);
 }
 
 int main() {
     int no_files;
-    printf("No of files: ");
-    scanf("%i", &no_files);
 
-    printf("\n");
+    printf("No of files: ");
+    scanf("%d", &no_files);
+
     printf("Word: ");
     scanf("%s", word);
 
     pthread_t tid[no_files];
+    pthread_mutex_init(&lock, NULL);
 
-    for (int i = 0; i < no_files; i++)
-        pthread_create(&tid[i], NULL, &search_word, &i);
+    for (int i = 0; i < no_files; i++) {
+        ThreadArgs *args = (ThreadArgs *)malloc(sizeof(ThreadArgs));
+        args->id = i;
+        
+        printf("Enter path of file %d: ", i + 1);
+        scanf("%s", args->path);
 
-    for (int i = 0; i < no_files; i++)
+        if (pthread_create(&tid[i], NULL, search_word, args) != 0) {
+            printf("Error creating thread %d\n", i);
+            free(args);
+        }
+    }
+
+    for (int i = 0; i < no_files; i++) {
         pthread_join(tid[i], NULL);
+    }
+
+    pthread_mutex_destroy(&lock);
 
     printf("The word '%s' appears %d times in %d files.\n", word, no_ap, no_files);
 
